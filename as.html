@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive DNA Structure</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: linear-gradient(135deg, #1a2a6c, #b21f1f, #fdbb2d);
+            font-family: 'Arial', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100vh;
+            color: white;
+        }
+        
+        .header {
+            margin: 20px 0;
+            text-align: center;
+        }
+        
+        .header h1 {
+            margin: 0;
+            font-size: 2.5em;
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+        }
+        
+        .header p {
+            margin: 5px 0;
+            font-size: 1.1em;
+        }
+        
+        .dna-container {
+            position: relative;
+            width: 100%;
+            height: 70vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        canvas {
+            background-color: rgba(0, 0, 0, 0.2);
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+        }
+        
+        .controls {
+            margin: 20px;
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            font-size: 1em;
+            cursor: pointer;
+            transition: all 0.3s;
+            backdrop-filter: blur(5px);
+        }
+        
+        button:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: scale(1.05);
+        }
+        
+        .base-count {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 0.9em;
+        }
+        
+        .tooltip {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s;
+            font-size: 0.9em;
+            max-width: 200px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>DNA Double Helix</h1>
+        <p>Interactive 3D Simulation</p>
+    </div>
+    
+    <div class="dna-container">
+        <canvas id="dnaCanvas"></canvas>
+        <div class="base-count" id="baseCount">Base pairs: 0</div>
+        <div class="tooltip" id="tooltip"></div>
+    </div>
+    
+    <div class="controls">
+        <button id="addBase">Add Base Pair</button>
+        <button id="removeBase">Remove Base Pair</button>
+        <button id="rotateToggle">Toggle Rotation</button>
+        <button id="changeColor">Change Color Scheme</button>
+        <button id="resetDNA">Reset DNA</button>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const canvas = document.getElementById('dnaCanvas');
+            const ctx = canvas.getContext('2d');
+
+            const baseCountDisplay = document.getElementById('baseCount');
+            const tooltip = document.getElementById('tooltip');
+            
+            function resizeCanvas() {
+                const container = document.querySelector('.dna-container');
+                canvas.width = Math.min(container.clientWidth, 1000);
+                canvas.height = Math.min(container.clientHeight, 600);
+            }
+            
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
+            
+            let basePairs = [];
+            const baseColors = {
+                'A': '#FF5555',  
+                'T': '#55FF55',  
+                'C': '#5555FF',  
+                'G': '#FFFF55'   
+            };
+            
+            let colorSchemes = [
+                { backbone: '#4FC3F7', connector: '#FFFFFF' },
+                { backbone: '#FF8A65', connector: '#F5F5F5' },
+                { backbone: '#BA68C8', connector: '#E1BEE7' },
+                { backbone: '#4DB6AC', connector: '#B2DFDB' }
+            ];
+            let currentColorScheme = 0;
+            
+            let rotationAngle = 0;
+            let rotationSpeed = 0.005;
+            let isRotating = true;
+            let mouseX = 0;
+            let mouseY = 0;
+            let isMouseDown = false;
+            let lastMouseX = 0;
+            let lastMouseY = 0;
+            
+            function initializeDNA(count = 20) {
+                basePairs = [];
+                for (let i = 0; i < count; i++) {
+                    addBasePair();
+                }
+            }
+            
+            function addBasePair() {
+                const base1 = Object.keys(baseColors)[Math.floor(Math.random() * 4)];
+                let base2;
+                
+                if (base1 === 'A') base2 = 'T';
+                else if (base1 === 'T') base2 = 'A';
+                else if (base1 === 'C') base2 = 'G';
+                else if (base1 === 'G') base2 = 'C';
+                
+                basePairs.push({
+                    base1,
+                    base2,
+                    yPos: basePairs.length * 10,
+                    rotation: Math.random() * Math.PI * 2
+                });
+                
+                updateBaseCount();
+            }
+            
+            function removeBasePair() {
+                if (basePairs.length > 0) {
+                    basePairs.pop();
+                    updateBaseCount();
+                }
+            }
+            
+            function updateBaseCount() {
+                baseCountDisplay.textContent = `Base pairs: ${basePairs.length}`;
+            }
+            
+            function drawDNA() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                
+                const centerX = canvas.width / 2;
+                const centerY = canvas.height / 2;
+                const scale = Math.min(canvas.width, canvas.height) / 300;
+                
+                for (let i = 0; i < basePairs.length; i++) {
+                    const bp = basePairs[i];
+                    const angle = bp.rotation + rotationAngle;
+                    const y = centerY + (i - basePairs.length / 2) * 10 * scale;
+                    
+                    const leftX = centerX - 30 * scale * Math.cos(angle);
+                    ctx.beginPath();
+                    ctx.arc(leftX, y, 3 * scale, 0, Math.PI * 2);
+                    ctx.fillStyle = colorSchemes[currentColorScheme].backbone;
+                    ctx.fill();
+                    
+                    const rightX = centerX + 30 * scale * Math.cos(angle);
+                    ctx.beginPath();
+                    ctx.arc(rightX, y, 3 * scale, 0, Math.PI * 2);
+                    ctx.fillStyle = colorSchemes[currentColorScheme].backbone;
+                    ctx.fill();
+                    
+                    if (i < basePairs.length - 1) {
+                        const nextY = centerY + (i + 1 - basePairs.length / 2) * 10 * scale;
+                        const nextAngle = basePairs[i + 1].rotation + rotationAngle;
+                        const nextLeftX = centerX - 30 * scale * Math.cos(nextAngle);
+                        const nextRightX = centerX + 30 * scale * Math.cos(nextAngle);
+                        
+                        ctx.beginPath();
+                        ctx.moveTo(leftX, y);
+                        ctx.lineTo(nextLeftX, nextY);
+                        ctx.strokeStyle = colorSchemes[currentColorScheme].connector;
+                        ctx.lineWidth = 1 * scale;
+                        ctx.stroke();
+                        
+                        ctx.beginPath();
+                        ctx.moveTo(rightX, y);
+                        ctx.lineTo(nextRightX, nextY);
+                        ctx.strokeStyle = colorSchemes[currentColorScheme].connector;
+                        ctx.lineWidth = 1 * scale;
+                        ctx.stroke();
+                    }
+                    
+                    const baseX1 = leftX + 5 * scale * Math.cos(angle);
+                    const baseX2 = rightX - 5 * scale * Math.cos(angle);
+                    
+                    ctx.beginPath();
+                    ctx.arc(baseX1, y, 4 * scale, 0, Math.PI * 2);
+                    ctx.fillStyle = baseColors[bp.base1];
+                    ctx.fill();
+                    
+                    ctx.beginPath();
+                    ctx.arc(baseX2, y, 4 * scale, 0, Math.PI * 2);
+                    ctx.fillStyle = baseColors[bp.base2];
+                    ctx.fill();
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(baseX1, y);
+                    ctx.lineTo(baseX2, y);
+                    ctx.strokeStyle = colorSchemes[currentColorScheme].connector;
+                    ctx.lineWidth = 1 * scale;
+                    ctx.stroke();
+                    
+                    const mouseAngle = Math.atan2(mouseY - centerY, mouseX - centerX);
+                    const mouseDistance = Math.sqrt(
+                        Math.pow(mouseX - centerX, 2) + 
+                        Math.pow(mouseY - centerY, 2)
+                    );
+                    
+                    const baseY = centerY + (i - basePairs.length / 2) * 10 * scale;
+                    const baseDistance = Math.sqrt(
+                        Math.pow(mouseX - baseX1, 2) + 
+                        Math.pow(mouseY - baseY, 2)
+                    );
+                    
+                    if (baseDistance < 8 * scale) {
+                        tooltip.style.opacity = 1;
+                        tooltip.style.left = (mouseX + 10) + 'px';
+                        tooltip.style.top = (mouseY + 10) + 'px';
+                        tooltip.textContent = `Base Pair ${i+1}: ${bp.base1}-${bp.base2}`;
+                    }
+                }
+                
+                drawLegend(centerX, centerY, scale);
+            }
+            
+            function drawLegend(centerX, centerY, scale) {
+                const legendX = centerX - 140 * scale;
+                const legendY = centerY - 120 * scale;
+                
+                ctx.font = `${12 * scale}px Arial`;
+                ctx.fillStyle = 'white';
+                ctx.textAlign = 'left';
+                ctx.fillText('Base Pair Colors:', 30, 150);
+                
+                const bases = ['A', 'T', 'C', 'G'];
+                bases.forEach((base, i) => {
+                    ctx.beginPath();
+                    ctx.arc(50 + 50 * scale, 200 + (i * 20 - 10) * scale, 5 * scale, 0, Math.PI * 2);
+                    ctx.fillStyle = baseColors[base];
+                    ctx.fill();
+                    ctx.fillText(`${base} (${getBaseName(base)})`,  110 * scale, 210 + (i * 20 - 10) * scale + 5);
+                });
+            }
+            
+            function getBaseName(base) {
+                switch(base) {
+                    case 'A': return 'Adenine';
+                    case 'T': return 'Thymine';
+                    case 'C': return 'Cytosine';
+                    case 'G': return 'Guanine';
+                    default: return '';
+                }
+            }
+            
+            function animate() {
+                if (isRotating) {
+                    rotationAngle += rotationSpeed;
+                }
+                
+                drawDNA();
+                requestAnimationFrame(animate);
+            }
+            
+            document.getElementById('addBase').addEventListener('click', addBasePair);
+            document.getElementById('removeBase').addEventListener('click', removeBasePair);
+            document.getElementById('rotateToggle').addEventListener('click', () => {
+                isRotating = !isRotating;
+            });
+            document.getElementById('changeColor').addEventListener('click', () => {
+                currentColorScheme = (currentColorScheme + 1) % colorSchemes.length;
+            });
+            document.getElementById('resetDNA').addEventListener('click', () => {
+                initializeDNA(20);
+            });
+            
+            canvas.addEventListener('mousemove', (e) => {
+                const rect = canvas.getBoundingClientRect();
+                mouseX = e.clientX - rect.left;
+                mouseY = e.clientY - rect.top;
+                
+                if (isMouseDown) {
+                    const dx = mouseX - lastMouseX;
+                    rotationAngle += dx * 0.01;
+                    lastMouseX = mouseX;
+                    lastMouseY = mouseY;
+                }
+            });
+            
+            canvas.addEventListener('mousedown', (e) => {
+                isMouseDown = true;
+                const rect = canvas.getBoundingClientRect();
+                lastMouseX = e.clientX - rect.left;
+                lastMouseY = e.clientY - rect.top;
+            });
+            
+            canvas.addEventListener('mouseup', () => {
+                isMouseDown = false;
+                tooltip.style.opacity = 0;
+            });
+            
+            canvas.addEventListener('mouseleave', () => {
+                isMouseDown = false;
+                tooltip.style.opacity = 0;
+            });
+            
+            initializeDNA();
+            animate();
+        });
+    </script>
+</body>
+</html>
